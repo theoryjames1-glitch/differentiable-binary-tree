@@ -206,6 +206,93 @@ Step 9: y=2.642, loss=0.0640
 
 The model output moves toward the target $3.0$.
 
-Do you want me to extend this into a full mini-dataset demo (with multiple inputs and targets, like a 1-D regression problem)?
+To give a soft tree memory, wrap it inside a recurrent system. The tree itself stays the same, but its **input includes a hidden state** carried over time.
+
+---
+
+### 1. Define recurrent hidden state
+
+Let $h_t$ be a hidden vector at time $t$.
+You update it each step:
+
+$$
+h_{t+1} = f(h_t, x_t)
+$$
+
+where $f$ can itself be a differentiable function — here we make it the soft tree.
+
+---
+
+### 2. Soft tree with hidden state
+
+Modify the gates to depend on both $x_t$ (current input) and $h_t$ (previous hidden state):
+
+$$
+g(x_t, h_t; w) = \sigma(w^\top [x_t, h_t])
+$$
+
+The leaf values $y_\ell$ can be vectors of the same dimension as $h_t$.
+
+Then output:
+
+$$
+y_t = \sum_\ell P(\ell \mid x_t,h_t)\, y_\ell
+$$
+
+and set
+
+$$
+h_{t+1} = y_t
+$$
+
+---
+
+### 3. Behavior
+
+* The tree now **remembers past inputs** through $h_t$.
+* Training is still by backpropagation through time (BPTT).
+* Memory capacity depends on the depth and structure of the tree and the dimensionality of $h_t$.
+
+---
+
+### 4. Python sketch
+
+```python
+import numpy as np
+
+def sigmoid(z): return 1/(1+np.exp(-z))
+
+def soft_tree(xh, s0, sL, sR, leaves):
+    g0 = sigmoid(np.dot(s0, xh))
+    gL = sigmoid(np.dot(sL, xh))
+    gR = sigmoid(np.dot(sR, xh))
+
+    P = {}
+    P['LL'] = (1-g0)*(1-gL)
+    P['LR'] = (1-g0)*gL
+    P['RL'] = g0*(1-gR)
+    P['RR'] = g0*gR
+
+    y = sum(P[k]*leaves[k] for k in leaves)
+    return y
+```
+
+Here:
+
+* `xh` is the concatenation of current input and previous hidden state.
+* `s0, sL, sR` are weight vectors.
+* `leaves[k]` can be vectors.
+* At each step:
+
+  1. Form `xh = np.concatenate([x_t, h_t])`.
+  2. Compute `y_t = soft_tree(xh, ...)`.
+  3. Set `h_{t+1} = y_t`.
+
+---
+
+This gives you a recurrent differentiable binary tree — effectively a tree-structured recurrent cell.
+
+Do you want me to build a **full runnable demo** where this recurrent soft tree processes a sequence and learns to predict the next element?
+
 
 
